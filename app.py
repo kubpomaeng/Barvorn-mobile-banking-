@@ -4,188 +4,172 @@ import pandas as pd
 from datetime import datetime
 from streamlit_option_menu import option_menu
 import random
-import re
+import time
+import os
 
 # --- CONFIG ---
-st.set_page_config(page_title="Borworn Private Banking", page_icon="🏦", layout="centered")
+st.set_page_config(page_title="Borworn Private Banking", page_icon="🏛️", layout="centered")
 
 # --- DATABASE SETUP ---
-conn = sqlite3.connect('borworn_private_v1.db', check_same_thread=False)
+conn = sqlite3.connect('borworn_master_v4.db', check_same_thread=False)
 c = conn.cursor()
 
 def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS Users 
-                 (username TEXT PRIMARY KEY, name TEXT, email TEXT, password TEXT, 
-                  balance REAL, pin TEXT, acc_type TEXT DEFAULT 'Private Wealth')''')
+                 (acc_id TEXT PRIMARY KEY, username TEXT, name TEXT, password TEXT, 
+                  balance REAL, pin TEXT, status TEXT DEFAULT 'Active')''')
     c.execute('''CREATE TABLE IF NOT EXISTS Transactions 
-                 (sender TEXT, receiver TEXT, amount REAL, date TEXT, type TEXT, ref_no TEXT)''')
+                 (sender_id TEXT, receiver_id TEXT, amount REAL, date TEXT, type TEXT, ref_no TEXT)''')
     conn.commit()
 
 init_db()
 
-# --- CSS: LUXURY DEEP NAVY ---
+# --- CSS: LUXURY UI ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@200;400;500&display=swap');
     * { font-family: 'Kanit', sans-serif; }
-    .stApp { background-color: #f8fafc; }
-    
-    .premium-card {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        color: #ffffff; padding: 25px; border-radius: 20px;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.15); 
-        border-top: 5px solid #eab308; margin-bottom: 25px;
+    .stApp { background-color: #fcfcfc; }
+    .bank-card {
+        background: linear-gradient(135deg, #020617 0%, #1e1b4b 100%);
+        color: #f8fafc; padding: 30px; border-radius: 24px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(234, 179, 8, 0.3);
     }
-    
-    .pin-btn button {
-        border-radius: 50% !important; width: 75px !important; height: 75px !important;
-        font-size: 24px !important; background: white !important; color: #0f172a !important;
-        border: 1px solid #e2e8f0 !important; margin: 8px auto !important; display: block !important;
+    .pin-box button {
+        border-radius: 50% !important; width: 80px !important; height: 80px !important;
+        font-size: 26px !important; background: #ffffff !important; color: #1e1b4b !important;
+        border: 1px solid #e2e8f0 !important; margin: 10px auto !important;
     }
-    .pin-btn button:hover { border-color: #eab308 !important; color: #eab308 !important; }
-    
-    .admin-area { background: #ffffff; padding: 20px; border-radius: 15px; border: 1px solid #e2e8f0; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SESSION STATE ---
-if "auth_status" not in st.session_state: st.session_state.auth_status = "login_page"
-if "user_session" not in st.session_state: st.session_state.user_session = None
-if "pin_temp" not in st.session_state: st.session_state.pin_temp = ""
+# --- PERSISTENT LOGIN LOGIC (แก้ปัญหารีเฟรชแล้วหลุด) ---
+# ใช้รหัสประจำตัวชั่วคราวเพื่อจำลองการจำ User ค้างไว้ใน Session
+if "page" not in st.session_state: 
+    st.session_state.page = "login"
+if "current_acc" not in st.session_state: 
+    st.session_state.current_acc = None
+if "pin_input" not in st.session_state: 
+    st.session_state.pin_input = ""
+if "is_authenticated" not in st.session_state:
+    st.session_state.is_authenticated = False
 
 # ---------------------------------------------------------
-# 🛡️ LOGIN & STAFF CONTROL
+# 🏛️ GATEWAY
 # ---------------------------------------------------------
-if st.session_state.auth_status == "login_page":
-    st.markdown("<h1 style='text-align:center; color:#0f172a;'>BORWORN BANK</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#64748b; margin-bottom:30px;'>Private Banking Service</p>", unsafe_allow_html=True)
-    
-    tab1, tab2 = st.tabs(["🔑 เข้าสู่ระบบลูกค้า", "👨‍💼 สำหรับเจ้าหน้าที่"])
-    
-    with tab1:
-        with st.form("login_form"):
-            u = st.text_input("Username (ชื่อผู้ใช้งาน)")
-            p = st.text_input("Password (รหัสผ่าน)", type="password")
-            if st.form_submit_button("ยืนยันเข้าใช้งาน", use_container_width=True, type="primary"):
-                user = c.execute("SELECT * FROM Users WHERE username=? AND password=?", (u, p)).fetchone()
-                if user:
-                    st.session_state.user_session = u
-                    st.session_state.auth_status = "pin_page" if user[5] else "set_pin_page"
-                    st.rerun()
-                else: st.error("ข้อมูลไม่ถูกต้อง กรุณาติดต่อธนาคารเพื่อขอรับบัญชี")
-
-    with tab2:
-        if st.text_input("กรอกรหัสพนักงาน (Staff Key)", type="password") == "Kub1":
-            st.markdown('<div class="admin-area">', unsafe_allow_html=True)
-            st.subheader("📋 ระบบลงทะเบียนลูกค้าใหม่")
-            with st.form("admin_reg"):
-                col1, col2 = st.columns(2)
-                new_u = col1.text_input("เลขบัญชี/Username")
-                new_n = col2.text_input("ชื่อ-นามสกุลลูกค้า")
-                new_e = col1.text_input("อีเมลลูกค้า (เพื่อยืนยัน)")
-                new_p = col2.text_input("กำหนดรหัสผ่านเบื้องต้น")
-                new_b = st.number_input("เงินฝากเริ่มต้น (บาท)", value=1000.0)
-                
-                if st.form_submit_button("ออกใบเปิดบัญชี"):
-                    if new_u and new_n and new_p:
-                        try:
-                            c.execute("INSERT INTO Users (username, name, email, password, balance) VALUES (?,?,?,?,?)", 
-                                      (new_u, new_n, new_e, new_p, new_b))
-                            conn.commit()
-                            st.success(f"✅ บัญชี {new_u} ถูกสร้างเรียบร้อยแล้ว!")
-                        except: st.error("❌ เลขบัญชี/Username นี้มีอยู่ในระบบแล้ว")
-            
-            st.divider()
-            st.subheader("⚙️ จัดการฐานข้อมูล")
-            manage_op = st.radio("เลือกการทำงาน", ["ดูรายชื่อทั้งหมด", "ลบข้อมูลลูกค้า", "ล้างระบบทั้งหมด"])
-            if manage_op == "ดูรายชื่อทั้งหมด":
-                st.write(pd.read_sql("SELECT username, name, balance FROM Users", conn))
-            elif manage_op == "ล้างระบบทั้งหมด":
-                if st.button("🔥 ยืนยันล้างข้อมูล"):
-                    c.execute("DELETE FROM Users"); c.execute("DELETE FROM Transactions")
-                    conn.commit(); st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# 🔢 PIN KEYPAD
-# ---------------------------------------------------------
-elif st.session_state.auth_status == "pin_page":
-    user = c.execute("SELECT name, pin FROM Users WHERE username=?", (st.session_state.user_session,)).fetchone()
-    st.markdown(f"<h3 style='text-align:center;'>ยินดีต้อนรับคุณ {user[0]}</h3>", unsafe_allow_html=True)
-    
-    dots = " ".join(["●" if i < len(st.session_state.pin_temp) else "○" for i in range(6)])
-    st.markdown(f"<h1 style='text-align:center; color:#0f172a; letter-spacing:10px;'>{dots}</h1>", unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-    keys = ['1','2','3','4','5','6','7','8','9','Clear','0','Del']
-    for i, k in enumerate(keys):
-        with [col1, col2, col3][i % 3]:
-            st.markdown('<div class="pin-btn">', unsafe_allow_html=True)
-            if st.button(k, key=f"k_{k}"):
-                if k == 'Del': st.session_state.pin_temp = st.session_state.pin_temp[:-1]
-                elif k == 'Clear': st.session_state.pin_temp = ""
-                elif len(st.session_state.pin_temp) < 6: st.session_state.pin_temp += k
-                
-                if len(st.session_state.pin_temp) == 6:
-                    if st.session_state.pin_temp == user[1]:
-                        st.session_state.auth_status = "dashboard"
-                        st.session_state.pin_temp = ""
+if not st.session_state.is_authenticated:
+    if st.session_state.page == "login":
+        st.markdown("<h1 style='text-align:center; color:#1e1b4b;'>🏛️ BORWORN</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color:#64748b; letter-spacing:2px;'>PRIVATE BANKING</p>", unsafe_allow_html=True)
+        
+        t1, t2 = st.tabs(["Client Access", "Staff Only"])
+        
+        with t1:
+            with st.form("login_form"):
+                usr = st.text_input("Username")
+                pwd = st.text_input("Password", type="password")
+                if st.form_submit_button("Sign In", use_container_width=True, type="primary"):
+                    user = c.execute("SELECT acc_id, pin FROM Users WHERE username=? AND password=?", (usr, pwd)).fetchone()
+                    if user:
+                        st.session_state.current_acc = user[0]
+                        st.session_state.page = "pin_verify" if user[1] else "setup_pin"
                         st.rerun()
-                    else:
-                        st.error("PIN ไม่ถูกต้อง")
-                        st.session_state.pin_temp = ""
-            st.markdown('</div>', unsafe_allow_html=True)
+                    else: st.error("ข้อมูลไม่ถูกต้อง")
+        
+        with t2:
+            if st.text_input("Staff Key", type="password") == "Kub1":
+                st.info("เปิดบัญชีใหม่ได้ที่นี่")
+                with st.form("admin_reg"):
+                    new_id = "".join([str(random.randint(0, 9)) for _ in range(10)])
+                    n_u = st.text_input("Username")
+                    n_n = st.text_input("ชื่อลูกค้า")
+                    n_p = st.text_input("Password")
+                    n_b = st.number_input("เงินเริ่มต้น", value=1000.0)
+                    if st.form_submit_button("บันทึกข้อมูล"):
+                        c.execute("INSERT INTO Users (acc_id, username, name, password, balance) VALUES (?,?,?,?,?)", (new_id, n_u, n_n, n_p, n_b))
+                        conn.commit(); st.success(f"สร้างสำเร็จ! เลขบัญชี: {new_id}")
+
+    elif st.session_state.page == "pin_verify":
+        u_data = c.execute("SELECT name, pin FROM Users WHERE acc_id=?", (st.session_state.current_acc,)).fetchone()
+        st.markdown(f"<h3 style='text-align:center;'>Welcome, {u_data[0]}</h3>", unsafe_allow_html=True)
+        
+        stars = " ".join(["●" if i < len(st.session_state.pin_input) else "○" for i in range(6)])
+        st.markdown(f"<h1 style='text-align:center; color:#1e1b4b; letter-spacing:8px;'>{stars}</h1>", unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns(3)
+        nums = ['1','2','3','4','5','6','7','8','9','C','0','Del']
+        for i, n in enumerate(nums):
+            with [col1, col2, col3][i % 3]:
+                st.markdown('<div class="pin-box">', unsafe_allow_html=True)
+                if st.button(n, key=f"p_{n}"):
+                    if n == 'Del': st.session_state.pin_input = st.session_state.pin_input[:-1]
+                    elif n == 'C': st.session_state.pin_input = ""
+                    elif len(st.session_state.pin_input) < 6: st.session_state.pin_input += n
+                    
+                    if len(st.session_state.pin_input) == 6:
+                        if st.session_state.pin_input == u_data[1]:
+                            st.session_state.is_authenticated = True
+                            st.session_state.page = "main"
+                            st.rerun()
+                        else:
+                            st.error("PIN ผิดพลาด")
+                            st.session_state.pin_input = ""
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    elif st.session_state.page == "setup_pin":
+        st.subheader("🛡️ ตั้งรหัส PIN 6 หลักของคุณ")
+        p1 = st.text_input("กำหนด PIN", type="password", max_chars=6)
+        p2 = st.text_input("ยืนยัน PIN", type="password", max_chars=6)
+        if st.button("บันทึกและเข้าใช้งาน"):
+            if len(p1) == 6 and p1 == p2:
+                c.execute("UPDATE Users SET pin=? WHERE acc_id=?", (p1, st.session_state.current_acc))
+                conn.commit()
+                st.session_state.is_authenticated = True
+                st.session_state.page = "main"
+                st.rerun()
 
 # ---------------------------------------------------------
-# 🏠 DASHBOARD
+# 🏠 MAIN DASHBOARD (เมื่อล็อกอินสำเร็จแล้ว)
 # ---------------------------------------------------------
-elif st.session_state.auth_status == "dashboard":
-    u = c.execute("SELECT * FROM Users WHERE username=?", (st.session_state.user_session,)).fetchone()
+else:
+    u = c.execute("SELECT * FROM Users WHERE acc_id=?", (st.session_state.current_acc,)).fetchone()
     
-    nav = option_menu(None, ["หน้าแรก", "โอนเงิน", "ประวัติ", "บัญชี"], 
-        icons=['house', 'arrow-left-right', 'clock-history', 'person'], 
-        orientation="horizontal", styles={"nav-link-selected": {"background-color": "#0f172a"}})
+    menu = option_menu(None, ["หน้าหลัก", "โอนเงิน", "ประวัติ", "ออกจากระบบ"], 
+        icons=['grid-fill', 'send', 'clock', 'door-open'], 
+        orientation="horizontal", styles={"nav-link-selected": {"background-color": "#1e1b4b"}})
 
-    if nav == "หน้าแรก":
+    if menu == "หน้าหลัก":
         st.markdown(f"""
-        <div class="premium-card">
-            <small>ยอดเงินที่ใช้ได้</small>
-            <h1 style="color:white; margin:10px 0;">฿ {u[4]:,.2f}</h1>
-            <div style="display:flex; justify-content:space-between; margin-top:15px; font-size:14px; opacity:0.8;">
-                <span>{u[1]}</span>
-                <span>เลขที่บัญชี: {u[0]}</span>
+        <div class="bank-card">
+            <small style="opacity:0.6;">Wealth Balance</small>
+            <h1 style="color:white; margin:5px 0; font-size:35px;">฿ {u[4]:,.2f}</h1>
+            <div style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px; display:flex; justify-content:space-between; font-size:14px;">
+                <span>{u[2]}</span>
+                <span style="font-family:monospace;">{u[0]}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={u[0]}", width=220)
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={u[0]}", width=200)
 
-    elif nav == "โอนเงิน":
+    elif menu == "โอนเงิน":
         target = st.text_input("เลขบัญชีผู้รับ")
         amt = st.number_input("จำนวนเงิน (บาท)", min_value=1.0)
-        if st.button("ยืนยันโอนเงิน", type="primary", use_container_width=True):
-            recv = c.execute("SELECT name FROM Users WHERE username=?", (target,)).fetchone()
+        if st.button("ยืนยันการโอน", type="primary", use_container_width=True):
+            recv = c.execute("SELECT name FROM Users WHERE acc_id=?", (target,)).fetchone()
             if recv and u[4] >= amt and target != u[0]:
-                ref = f"REF{random.randint(100000, 999999)}"
-                c.execute("UPDATE Users SET balance = balance - ? WHERE username=?", (amt, u[0]))
-                c.execute("UPDATE Users SET balance = balance + ? WHERE username=?", (amt, target))
-                c.execute("INSERT INTO Transactions VALUES (?,?,?,?,?,?)", (u[0], target, amt, datetime.now().strftime("%H:%M | %d/%m/%y"), "โอนเงิน", ref))
-                conn.commit(); st.success(f"โอนสำเร็จ!"); st.balloons()
-            else: st.error("ไม่สามารถโอนได้ กรุณาเช็คเลขบัญชีหรือยอดเงิน")
+                c.execute("UPDATE Users SET balance = balance - ? WHERE acc_id=?", (amt, u[0]))
+                c.execute("UPDATE Users SET balance = balance + ? WHERE acc_id=?", (amt, target))
+                c.execute("INSERT INTO Transactions VALUES (?,?,?,?,?,?)", (u[0], target, amt, datetime.now().strftime("%H:%M | %d/%m/%y"), "Transfer", f"REF{random.randint(1000,9999)}"))
+                conn.commit(); st.success("โอนสำเร็จ!"); st.balloons()
+            else: st.error("ข้อมูลผิดพลาดหรือเงินไม่พอ")
 
-    elif nav == "ประวัติ":
-        df = pd.read_sql(f"SELECT * FROM Transactions WHERE sender='{u[0]}' OR receiver='{u[0]}'", conn)
+    elif menu == "ประวัติ":
+        df = pd.read_sql(f"SELECT * FROM Transactions WHERE sender_id='{u[0]}' OR receiver_id='{u[0]}'", conn)
         st.dataframe(df.sort_index(ascending=False), use_container_width=True)
 
-    elif nav == "บัญชี":
-        if st.button("ออกจากระบบ", type="primary", use_container_width=True):
-            st.session_state.auth_status = "login_page"; st.rerun()
-
-# --- SET PIN ---
-elif st.session_state.auth_status == "set_pin_page":
-    st.subheader("🔢 ตั้งค่ารหัสความปลอดภัย (PIN 6 หลัก)")
-    p1 = st.text_input("ตั้งรหัส PIN", type="password", max_chars=6)
-    p2 = st.text_input("ยืนยันรหัส", type="password", max_chars=6)
-    if st.button("บันทึกรหัส PIN"):
-        if len(p1) == 6 and p1 == p2 and p1.isdigit():
-            c.execute("UPDATE Users SET pin=? WHERE username=?", (p1, st.session_state.user_session))
-            conn.commit(); st.session_state.auth_status = "dashboard"; st.rerun()
+    elif menu == "ออกจากระบบ":
+        st.session_state.is_authenticated = False
+        st.session_state.page = "login"
+        st.session_state.current_acc = None
+        st.rerun()
