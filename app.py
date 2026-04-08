@@ -1,139 +1,152 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+import sqlite3
 import pandas as pd
 from datetime import datetime
+import plotly.express as px
 
 # --- CONFIG ---
-st.set_page_config(page_title="ธนาคารบวรพาณิชย์", page_icon="🏦", layout="centered")
+st.set_page_config(page_title="ธนาคารบวรพาณิชย์", page_icon="🏦", layout="wide")
 
+# --- DATABASE ---
+conn = sqlite3.connect('borworn_bank_v4.db', check_same_thread=False)
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS Users 
+             (acc_id TEXT PRIMARY KEY, name TEXT, username TEXT, password TEXT, balance REAL)''')
+c.execute('''CREATE TABLE IF NOT EXISTS Transactions 
+             (sender TEXT, receiver TEXT, amount REAL, date TEXT, type TEXT)''')
+conn.commit()
+
+# --- CSS จัดเต็มให้เหมือนแอปธนาคาร ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 10px; height: 3em; background-color: #6c5ce7; color: white; }
-    .stTextInput>div>div>input { border-radius: 10px; }
+    .main { background-color: #f0f2f6; }
+    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .stButton>button { width: 100%; border-radius: 12px; height: 3em; background-color: #0047ba; color: white; font-weight: bold; }
+    .stTab { background-color: white; padding: 10px; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 1. การเชื่อมต่อที่ยืดหยุ่น (Robust Connection) ---
-def get_data():
-    try:
-        # ใช้ TTL=0 เพื่อให้อัปเดตข้อมูลสดใหม่เสมอ
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # ดึงข้อมูล Users
-        df_users = conn.read(worksheet="Users", ttl=0)
-        # ลบเว้นวรรคที่ชื่อคอลัมน์ และทำให้เป็นตัวเล็กทั้งหมด (ป้องกันการพิมพ์ผิด)
-        df_users.columns = df_users.columns.str.strip().str.lower()
-        
-        # ดึงข้อมูล Transactions
-        df_trans = conn.read(worksheet="Transactions", ttl=0)
-        df_trans.columns = df_trans.columns.str.strip().str.lower()
-        
-        return conn, df_users, df_trans
-    except Exception as e:
-        st.error(f"❌ ไม่สามารถเชื่อมต่อ Google Sheets ได้: {e}")
-        st.info("💡 ตรวจสอบ: 1. ลิงก์ใน Secrets 2. ชื่อแผ่นงานต้องเป็น 'Users' และ 'Transactions'")
-        return None, None, None
-
-conn, df_users, df_trans = get_data()
-
-# --- 2. ระบบ LOGIN ---
+# --- SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-    st.session_state.user_info = None
+    st.session_state.user = None
 
-if not st.session_state.logged_in:
-    st.title("🏦 ธนาคารบวรพาณิชย์")
-    st.subheader("กรุณาเข้าสู่ระบบ")
+# --- SIDEBAR ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/2830/2830284.png", width=100)
+    st.title("Borworn Bank")
+    menu = st.radio("เมนูหลัก", ["🏠 หน้าแรก/Login", "🛠️ ระบบจัดการหลังบ้าน"])
+
+# ---------------------------------------------------------
+# 🛠️ โหมดช่องลับ (ADMIN PANEL) - รหัสลับ Kub1
+# ---------------------------------------------------------
+if menu == "🛠️ ระบบจัดการหลังบ้าน":
+    st.title("🛠️ แผงควบคุมผู้ดูแล (ช่องลับ)")
+    admin_pw = st.text_input("รหัสผ่านลับธนาคาร", type="password")
     
-    with st.form("login_form"):
-        user_input = st.text_input("ชื่อผู้ใช้งาน (Username)")
-        pass_input = st.text_input("รหัสผ่าน (Password)", type="password")
-        submit = st.form_submit_button("เข้าสู่ระบบ")
+    if admin_pw == "Kub1":
+        st.success("เข้าสู่ระบบพระเจ้าสำเร็จ")
+        t1, t2 = st.tabs(["🆕 ออกบัญชีใหม่", "📊 จัดการสมาชิก/แก้ไขเงิน"])
         
-        if submit:
-            if df_users is not None:
-                # ตรวจสอบ User (ใช้ .strip() ป้องกันเว้นวรรคในข้อมูล)
-                match = df_users[(df_users['username'].astype(str).str.strip() == user_input.strip()) & 
-                                 (df_users['password'].astype(str).str.strip() == pass_input.strip())]
-                
-                if not match.empty:
-                    st.session_state.logged_in = True
-                    st.session_state.user_info = match.iloc[0].to_dict()
-                    st.rerun()
-                else:
-                    st.error("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+        with t1:
+            with st.form("add_user"):
+                c1, c2 = st.columns(2)
+                acc = c1.text_input("เลขบัญชี (ID)")
+                name = c2.text_input("ชื่อลูกค้า")
+                user = c1.text_input("Username")
+                pw = c2.text_input("Password")
+                bal = st.number_input("เงินฝากเริ่มต้น", value=1000.0)
+                if st.form_submit_button("ยืนยันการออกบัญชี"):
+                    try:
+                        c.execute("INSERT INTO Users VALUES (?,?,?,?,?)", (acc, name, user, pw, bal))
+                        conn.commit()
+                        st.success(f"ออกบัญชีให้คุณ {name} สำเร็จ!")
+                    except: st.error("เลขบัญชีซ้ำ!")
 
-# --- 3. หน้าหลักหลัง LOGIN (ระบบโอนเงินจริง) ---
+        with t2:
+            df_users = pd.read_sql("SELECT * FROM Users", conn)
+            st.dataframe(df_users, use_container_width=True)
+            st.divider()
+            target_acc = st.selectbox("เลือกบัญชีที่ต้องการแก้ไข", df_users['acc_id'])
+            new_val = st.number_input("ปรับยอดเงินใหม่เป็น")
+            if st.button("บันทึกการแก้ไขเงิน"):
+                c.execute("UPDATE Users SET balance = ? WHERE acc_id = ?", (new_val, target_acc))
+                conn.commit()
+                st.success("แก้ไขยอดเงินสำเร็จ!")
+                st.rerun()
+    else:
+        st.info("กรุณากรอกรหัสผ่านลับเพื่อจัดการฐานข้อมูล")
+
+# ---------------------------------------------------------
+# 🏠 โหมดธนาคาร (CUSTOMER MODE)
+# ---------------------------------------------------------
 else:
-    user = st.session_state.user_info
-    st.title(f"สวัสดีคุณ {user['name']} 👋")
-    
-    # ดึงยอดเงินล่าสุดจาก DB (เผื่อมีการโอนเข้ามา)
-    current_user_data = df_users[df_users['acc_id'] == user['acc_id']].iloc[0]
-    balance = current_user_data['balance']
+    if not st.session_state.logged_in:
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.title("🏦 ธนาคารบวรพาณิชย์")
+            st.write("เข้าสู่ระบบเพื่อทำธุรกรรม")
+            u_in = st.text_input("ชื่อผู้ใช้")
+            p_in = st.text_input("รหัสผ่าน", type="password")
+            if st.button("Log In"):
+                data = pd.read_sql(f"SELECT * FROM Users WHERE username='{u_in}' AND password='{p_in}'", conn)
+                if not data.empty:
+                    st.session_state.logged_in = True
+                    st.session_state.user = data.iloc[0].to_dict()
+                    st.rerun()
+                else: st.error("ไม่พบบัญชีนี้")
+    else:
+        # ดึงข้อมูลล่าสุด
+        u = st.session_state.user
+        res = c.execute("SELECT * FROM Users WHERE acc_id=?", (u['acc_id'],)).fetchone()
+        balance = res[4]
 
-    # แสดงยอดเงินแบบสวยงาม
-    st.metric(label="ยอดเงินคงเหลือปัจจุบัน", value=f"฿ {balance:,.2f}")
-    
-    st.divider()
+        # หน้า Dashboard
+        st.title(f"สวัสดี, คุณ {res[1]} 👋")
+        col_bal, col_qr = st.columns([2, 1])
+        
+        with col_bal:
+            st.metric("ยอดเงินในบัญชีปัจจุบัน", f"฿ {balance:,.2f}")
+            # กราฟจำลองรายรับรายจ่าย
+            df_hist = pd.read_sql(f"SELECT * FROM Transactions WHERE sender='{u['acc_id']}' OR receiver='{u['acc_id']}'", conn)
+            if not df_hist.empty:
+                fig = px.line(df_hist, x='date', y='amount', title="กราฟการเคลื่อนไหวของเงิน")
+                st.plotly_chart(fig, use_container_width=True)
 
-    # เมนูการทำรายการ
-    tab1, tab2 = st.tabs(["💸 โอนเงิน", "📜 ประวัติรายการ"])
+        with col_qr:
+            st.info("My QR Code")
+            st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={u['acc_id']}", caption=f"ID: {u['acc_id']}")
 
-    with tab1:
-        st.write("### ทำรายการโอนเงิน")
-        to_acc = st.text_input("เลขบัญชีผู้รับ")
-        amount = st.number_input("จำนวนเงินที่ต้องการโอน", min_value=1.0, step=100.0)
-        memo = st.text_input("บันทึกช่วยจำ (ไม่ระบุก็ได้)")
-
-        if st.button("ยืนยันการโอนเงิน"):
-            # 1. เช็คว่าเลขบัญชีมีจริงไหม
-            receiver = df_users[df_users['acc_id'].astype(str).str.strip() == to_acc.strip()]
-            
-            if to_acc.strip() == str(user['acc_id']):
-                st.warning("ไม่สามารถโอนเงินให้ตัวเองได้")
-            elif receiver.empty:
-                st.error("ไม่พบเลขบัญชีผู้รับในระบบ")
-            elif balance < amount:
-                st.error("ยอดเงินคงเหลือไม่เพียงพอ")
-            else:
-                # --- ขั้นตอนการโอนเงิน (Update DataFrame) ---
-                # ลดเงินผู้โอน
-                df_users.loc[df_users['acc_id'] == user['acc_id'], 'balance'] -= amount
-                # เพิ่มเงินผู้รับ
-                df_users.loc[df_users['acc_id'] == receiver.iloc[0]['acc_id'], 'balance'] += amount
-                
-                # เพิ่มประวัติ Transactions
-                new_trans = pd.DataFrame([{
-                    "from": user['acc_id'],
-                    "to": to_acc,
-                    "amount": amount,
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "memo": memo
-                }])
-                df_updated_trans = pd.concat([df_trans, new_trans], ignore_index=True)
-
-                # อัปเดตกลับไปยัง Google Sheets
-                try:
-                    conn.update(worksheet="Users", data=df_users)
-                    conn.update(worksheet="Transactions", data=df_updated_trans)
-                    st.success(f"โอนเงินสำเร็จ! จำนวน ฿{amount:,.2f} ไปยังบัญชี {to_acc}")
+        # แท็บธุรกรรม
+        t_pay, t_history = st.tabs(["💸 โอนเงิน/ชำระเงิน", "📜 ประวัติการเดินบัญชี"])
+        
+        with t_pay:
+            target = st.text_input("ระบุเลขบัญชีผู้รับ")
+            amt = st.number_input("จำนวนเงิน (บาท)", min_value=1.0)
+            if st.button("🚀 ยืนยันการโอนเงิน"):
+                recv = c.execute("SELECT name FROM Users WHERE acc_id=?", (target,)).fetchone()
+                if not recv: st.error("ไม่พบเลขบัญชีผู้รับ")
+                elif balance < amt: st.error("ยอดเงินไม่เพียงพอ")
+                else:
+                    # ทำรายการ
+                    c.execute("UPDATE Users SET balance = balance - ? WHERE acc_id = ?", (amt, u['acc_id']))
+                    c.execute("UPDATE Users SET balance = balance + ? WHERE acc_id = ?", (amt, target))
+                    c.execute("INSERT INTO Transactions VALUES (?,?,?,?,?)", 
+                              (u['acc_id'], target, amt, datetime.now().strftime("%d/%m/%Y %H:%M"), "Transfer"))
+                    conn.commit()
+                    # สลิป
+                    st.success("โอนเงินสำเร็จ!")
                     st.balloons()
-                    st.rerun() # Refresh หน้าจอเพื่ออัปเดตยอดเงิน
-                except Exception as e:
-                    st.error(f"เกิดข้อผิดพลาดขณะบันทึกข้อมูล: {e}")
+                    with st.expander("📄 ดูสลิปการโอน"):
+                        st.write(f"**ผู้ส่ง:** {res[1]}")
+                        st.write(f"**ผู้รับ:** {recv[0]} (บัญชี {target})")
+                        st.write(f"**จำนวนเงิน:** ฿{amt:,.2f}")
+                        st.write(f"**เวลา:** {datetime.now().strftime('%H:%M:%S')}")
+                    st.button("ทำรายการต่อ", on_click=st.rerun)
 
-    with tab2:
-        st.write("### ประวัติการทำรายการของคุณ")
-        my_trans = df_trans[(df_trans['from'].astype(str) == str(user['acc_id'])) | 
-                           (df_trans['to'].astype(str) == str(user['acc_id']))]
-        if not my_trans.empty:
-            st.dataframe(my_trans.sort_index(ascending=False), use_container_width=True)
-        else:
-            st.write("ยังไม่มีประวัติการทำรายการ")
+        with t_history:
+            st.dataframe(df_hist.sort_index(ascending=False), use_container_width=True)
 
-    if st.button("ออกจากระบบ", type="secondary"):
-        st.session_state.logged_in = False
-        st.session_state.user_info = None
-        st.rerun()
+        if st.sidebar.button("ออกจากระบบ"):
+            st.session_state.logged_in = False
+            st.rerun()
