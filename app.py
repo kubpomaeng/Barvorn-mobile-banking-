@@ -10,7 +10,7 @@ from contextlib import contextmanager
 st.set_page_config(page_title="BORWORN PRESTIGE", page_icon="🏛️", layout="centered")
 
 # --- DATABASE ---
-DB_NAME = 'borworn_ultimate_v9.db'
+DB_NAME = 'borworn_final_v13.db'
 
 @st.cache_resource
 def get_connection():
@@ -27,206 +27,206 @@ def db_core():
         conn.commit()
     except Exception as e:
         conn.rollback()
-        st.error(f"Error: {e}")
+        st.error(f"ระบบขัดข้อง: {e}")
         raise e
 
 def init_db():
     with db_core() as c:
         c.execute('''CREATE TABLE IF NOT EXISTS Users 
                      (acc_id TEXT PRIMARY KEY, username TEXT UNIQUE, name TEXT, password TEXT, 
-                      balance REAL, status TEXT DEFAULT 'Active', role TEXT DEFAULT 'User')''')
-        c.execute("INSERT OR IGNORE INTO Users (acc_id, username, name, password, balance, role) VALUES (?,?,?,?,?,?)",
-                  ('2222222222', 'Tongchai', 'ศ.ดร.ธงชัย สว่างวงศ์ ณ อยุธยา', '1q2w3e4r', 999999999.0, 'Admin'))
-
+                      balance REAL, status TEXT DEFAULT 'Active', role TEXT DEFAULT 'User', created_at TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS Transactions 
+                     (sender_id TEXT, receiver_id TEXT, amount REAL, timestamp TEXT, type TEXT)''')
+        
+        # บัญชีหลักของท่านประธาน (The Owner)
+        c.execute("INSERT OR IGNORE INTO Users (acc_id, username, name, password, balance, role, created_at) VALUES (?,?,?,?,?,?,?)",
+                  ('1287892888', 'Tongchai', 'ศ.ดร.ธงชัย สว่างวงศ์ ณ อยุธยา', '1q2w3e4r', 100000.0, 'Admin', '01/01/2026 00:00'))
+◌ุ
 init_db()
 
-# --- NEW CIRCULAR UI CSS ---
+# --- LUXURY CSS ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@200;300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@200;300;400;500;600&display=swap');
     html, body, [class*="st-"] { font-family: 'Kanit', sans-serif; color: white !important; }
-    .stApp { background: #020617; }
-
-    /* Header */
+    .stApp { background-color: #020617; margin-bottom: 120px; }
+    
     .app-header {
         background: linear-gradient(180deg, #1e293b 0%, #020617 100%);
-        padding: 40px 20px; border-radius: 0 0 40px 40px; text-align: center;
-        border-bottom: 2px solid #f59e0b; margin-bottom: 30px;
+        padding: 40px 20px; text-align: center; border-bottom: 2px solid #f59e0b; margin-bottom: 20px;
     }
 
-    /* Circle Menu Container */
-    .menu-grid {
-        display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
-        text-align: center; margin-top: 20px;
-    }
-
-    /* Circle Button Style */
-    .stButton > button {
-        background: #1e293b !important;
-        color: white !important;
-        border: 2px solid #334155 !important;
-        border-radius: 50% !important; /* ทำเป็นวงกลม */
-        width: 100px !important;
-        height: 100px !important;
-        margin: 0 auto !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 30px !important;
-        transition: 0.3s !important;
-    }
-    .stButton > button:hover {
-        border-color: #f59e0b !important;
-        transform: scale(1.1);
-        background: #0f172a !important;
+    /* Bottom Navigation */
+    .bottom-nav {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(15px);
+        display: flex; justify-content: space-around; padding: 15px 0;
+        border-top: 1px solid #f59e0b; z-index: 9999;
     }
     
-    /* Label under circle */
-    .menu-label {
-        font-size: 14px; margin-top: 8px; font-weight: 300;
-        display: block; text-align: center; color: #f59e0b;
-    }
+    .nav-btn { background: transparent !important; border: none !important; font-size: 22px !important; }
+    .nav-label { font-size: 11px; color: #94a3b8; display: block; text-align: center; }
 
-    /* Admin Card */
-    .admin-card {
-        background: #0f172a; border: 1px solid #f59e0b;
-        padding: 20px; border-radius: 20px; margin-bottom: 10px;
+    /* Cards */
+    .glass-card {
+        background: rgba(255,255,255,0.05); padding: 20px; border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;
     }
+    
+    input { background-color: #0f172a !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
 if "page" not in st.session_state: st.session_state.page = "login"
-if "sub_page" not in st.session_state: st.session_state.sub_page = "home"
+if "sub_page" not in st.session_state: st.session_state.sub_page = "หน้าหลัก"
 
-# --- LOGIN ---
+# --- 🔐 LOGIN ---
 if st.session_state.page == "login":
-    st.markdown('<div class="app-header"><h1>BORWORN PRESTIGE</h1><p style="color:#f59e0b;">PRESTIGE ACCESS</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="app-header"><h1>BORWORN PRESTIGE</h1><p>กรุณาใช้รหัสผ่านที่ธนาคารออกให้</p></div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
-        with st.form("login_gate"):
+        with st.form("login"):
             u = st.text_input("Username").strip()
             p = st.text_input("Password", type="password").strip()
-            if st.form_submit_button("UNLOCK", use_container_width=True):
+            if st.form_submit_button("UNLOCK ACCESS", use_container_width=True):
                 with db_core() as c:
                     res = c.execute("SELECT * FROM Users WHERE username=? AND password=?", (u, p)).fetchone()
                 if res:
-                    st.session_state.user_id, st.session_state.username, st.session_state.user_full_name, st.session_state.user_pw, st.session_state.balance, st.session_state.status, st.session_state.user_role = res
-                    st.session_state.page = "main"
-                    st.rerun()
-                else: st.error("ข้อมูลผิดพลาด")
+                    if res[5] == 'Banned': st.error("บัญชีนี้ถูกอายัด กรุณาติดต่อธนาคาร")
+                    else:
+                        st.session_state.user_data = res # (acc_id, user, name, pw, bal, status, role, date)
+                        st.session_state.page = "main"; st.rerun()
+                else: st.error("ข้อมูลไม่ถูกต้อง")
 
-# --- MAIN SYSTEM ---
+# --- 🏦 MAIN APP ---
 elif st.session_state.page == "main":
+    # Refresh User Data
     with db_core() as c:
-        u_data = c.execute("SELECT balance, name FROM Users WHERE acc_id=?", (st.session_state.user_id,)).fetchone()
+        st.session_state.user_data = c.execute("SELECT * FROM Users WHERE acc_id=?", (st.session_state.user_data[0],)).fetchone()
     
-    st.markdown(f'''
-    <div class="app-header">
-        <p style="margin:0; opacity:0.7;">สวัสดีท่านประธาน</p>
-        <h2 style="margin:0;">{u_data[1]}</h2>
-        <h1 style="color:#f59e0b !important; font-size:3rem;">฿ {u_data[0]:,.2f}</h1>
-    </div>
-    ''', unsafe_allow_html=True)
+    u = st.session_state.user_data
+    
+    # 1. หน้าหลัก
+    if st.session_state.sub_page == "หน้าหลัก":
+        st.markdown(f'<div class="app-header"><small>ยอดเงินที่ใช้ได้</small><h1 style="color:#f59e0b;">฿ {u[4]:,.2f}</h1><p>{u[2]}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="glass-card"><b>เลขบัญชี:</b> {u[0]}<br><b>สถานะ:</b> {u[5]}</div>', unsafe_allow_html=True)
+        st.write("🕒 รายการล่าสุด")
+        with db_core() as c:
+            tx = pd.read_sql("SELECT * FROM Transactions WHERE sender_id=? OR receiver_id=? ORDER BY timestamp DESC LIMIT 5", c.connection, params=(u[0], u[0]))
+        st.dataframe(tx, use_container_width=True)
 
-    # --- เมนูวงกลม (Dashboard) ---
-    if st.session_state.sub_page == "home":
-        # แถวที่ 1
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("💸", key="m1"): st.session_state.sub_page = "send"
-            st.markdown('<span class="menu-label">โอนเงิน</span>', unsafe_allow_html=True)
-        with col2:
-            if st.button("📥", key="m2"): st.session_state.sub_page = "receive"
-            st.markdown('<span class="menu-label">รับเงิน</span>', unsafe_allow_html=True)
-        with col3:
-            if st.button("📸", key="m3"): st.session_state.sub_page = "scan"
-            st.markdown('<span class="menu-label">สแกน</span>', unsafe_allow_html=True)
-            
-        # แถวที่ 2
-        col4, col5, col6 = st.columns(3)
-        with col4:
-            if st.button("👤", key="m4"): st.session_state.sub_page = "profile"
-            st.markdown('<span class="menu-label">โปรไฟล์</span>', unsafe_allow_html=True)
-        with col5:
-            # ตรวจสอบสิทธิ์ Admin
-            if st.session_state.user_role == "Admin":
-                if st.button("👑", key="m5"): st.session_state.sub_page = "admin"
-                st.markdown('<span class="menu-label">แอดมิน</span>', unsafe_allow_html=True)
-            else:
-                if st.button("🎁", key="m5_u"): st.info("สิทธิพิเศษ")
-                st.markdown('<span class="menu-label">ของขวัญ</span>', unsafe_allow_html=True)
-        with col6:
-            if st.button("🚪", key="m6"): 
-                st.session_state.page = "login"; st.session_state.sub_page = "home"; st.rerun()
-            st.markdown('<span class="menu-label">ออก</span>', unsafe_allow_html=True)
+    # 2. รับเงิน
+    elif st.session_state.sub_page == "รับเงิน":
+        st.markdown("<h2 style='text-align:center;'>รับเงิน</h2>", unsafe_allow_html=True)
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={u[0]}&color=020617&bgcolor=ffffff"
+        st.image(qr_url, use_container_width=True)
+        st.markdown(f"<div class='glass-card' style='text-align:center;'><h3>{u[0]}</h3><p>{u[2]}</p></div>", unsafe_allow_html=True)
 
-    # --- เนื้อหาหน้าย่อย ---
-    if st.session_state.sub_page != "home":
-        if st.button("⬅️ ย้อนกลับ"): 
-            st.session_state.sub_page = "home"; st.rerun()
-        st.divider()
-
-    if st.session_state.sub_page == "send":
+    # 3. โอนเงิน
+    elif st.session_state.sub_page == "โอนเงิน":
         st.subheader("โอนเงิน")
-        t_id = st.text_input("เลขบัญชีผู้รับ")
-        t_amt = st.number_input("จำนวนเงิน (฿)", min_value=0.0)
-        if st.button("ตกลงโอนเงิน", type="primary"):
-            st.success("โอนสำเร็จ!"); time.sleep(1); st.rerun()
+        t_mode = st.radio("เลือกวิธีโอน", ["ระบุเลขบัญชี", "สแกน QR Code (จำลอง)"], horizontal=True)
+        with st.form("transfer"):
+            target = st.text_input("เลขบัญชีปลายทาง")
+            amt = st.number_input("จำนวนเงิน (฿)", min_value=0.01)
+            if st.form_submit_button("ยืนยันการโอน", use_container_width=True):
+                with db_core() as c:
+                    recv = c.execute("SELECT balance, status FROM Users WHERE acc_id=?", (target,)).fetchone()
+                    if not recv: st.error("ไม่พบเลขบัญชีนี้")
+                    elif u[4] < amt: st.error("ยอดเงินไม่เพียงพอ")
+                    elif u[5] == 'Banned': st.error("บัญชีท่านถูกอายัด")
+                    else:
+                        c.execute("UPDATE Users SET balance = balance - ? WHERE acc_id=?", (amt, u[0]))
+                        c.execute("UPDATE Users SET balance = balance + ? WHERE acc_id=?", (amt, target))
+                        c.execute("INSERT INTO Transactions VALUES (?,?,?,?,?)", (u[0], target, amt, datetime.now().strftime("%d/%m/%Y %H:%M"), "Transfer"))
+                        st.success("โอนเงินสำเร็จ!"); time.sleep(1); st.rerun()
 
-    elif st.session_state.sub_page == "receive":
-        st.subheader("รับเงินผ่าน QR")
-        qr = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={st.session_state.user_id}&color=020617&bgcolor=ffffff"
-        st.image(qr, width=200)
-        st.code(f"เลขบัญชี: {st.session_state.user_id}")
-
-    elif st.session_state.sub_page == "profile":
-        st.subheader("ข้อมูลส่วนตัว")
-        new_name = st.text_input("ชื่อ-นามสกุล", value=u_data[1])
-        if st.button("บันทึก"):
-            with db_core() as c: c.execute("UPDATE Users SET name=? WHERE acc_id=?", (new_name, st.session_state.user_id))
-            st.success("แก้ไขแล้ว"); st.rerun()
-
-    # --- 👑 หน้า ADMIN แบบจัดเต็ม (MASTER CONTROL) ---
-    elif st.session_state.sub_page == "admin":
-        st.subheader("👑 ศูนย์ควบคุมอำนาจเบ็ดเสร็จ")
+    # 4. บัญชี (และเมนู Admin)
+    elif st.session_state.sub_page == "บัญชี":
+        st.subheader("ข้อมูลบัญชี")
+        with st.expander("👤 ข้อมูลส่วนตัว", expanded=True):
+            st.write(f"**Username:** {u[1]}")
+            st.write(f"**Password:** {u[3]}")
+            st.write(f"**ตำแหน่ง:** {u[6]}")
+            new_n = st.text_input("แก้ไขชื่อ-นามสกุล", value=u[2])
+            if st.button("บันทึกการเปลี่ยนชื่อ"):
+                with db_core() as c: c.execute("UPDATE Users SET name=? WHERE acc_id=?", (new_n, u[0]))
+                st.success("เปลี่ยนชื่อสำเร็จ"); st.rerun()
         
-        tab1, tab2, tab3 = st.tabs(["👥 จัดการสมาชิก", "💰 เสก/คุมเงิน", "📊 ภาพรวมธนาคาร"])
-        
-        with tab1:
-            st.write("รายชื่อลูกค้าทั้งหมด")
-            with db_core() as c:
-                users = pd.read_sql("SELECT acc_id, name, username, status, role FROM Users", c.connection)
-            st.dataframe(users, use_container_width=True)
+        # --- 👑 ADMIN SECTION (Visible only to Admin) ---
+        if u[6] == 'Admin':
+            st.markdown("---")
+            st.subheader("👑 ระบบจัดการแอดมิน")
+            adm_choice = st.selectbox("เลือกฟังก์ชัน", ["1. สร้างบัญชีใหม่", "2. อายัด/ปลดอายัด", "3. ข้อมูลผู้ใช้ทั้งหมด", "4. ข้อมูลธุรกรรมทั้งหมด", "5. เปลี่ยนเลขบัญชี", "6. เสกเงิน", "7. มอบสิทธิ์ Admin"])
             
-            target_acc = st.text_input("ระบุเลขบัญชีที่ต้องการจัดการ")
-            c1, c2, c3 = st.columns(3)
-            if c1.button("🔴 ระงับบัญชี (Ban)"):
-                with db_core() as c: c.execute("UPDATE Users SET status='Banned' WHERE acc_id=?", (target_acc,))
-                st.warning("ระงับสำเร็จ"); st.rerun()
-            if c2.button("🟢 ปลดระงับ"):
-                with db_core() as c: c.execute("UPDATE Users SET status='Active' WHERE acc_id=?", (target_acc,))
-                st.success("ปลดระงับแล้ว"); st.rerun()
-            if c3.button("🗑️ ลบบัญชีทิ้ง"):
-                if target_acc != "2222222222":
-                    with db_core() as c: c.execute("DELETE FROM Users WHERE acc_id=?", (target_acc,))
-                    st.error("ลบเรียบร้อย"); st.rerun()
+            if adm_choice == "1. สร้างบัญชีใหม่":
+                with st.form("adm_reg"):
+                    new_u = st.text_input("Username")
+                    new_p = st.text_input("Password")
+                    new_name = st.text_input("ชื่อจริง")
+                    if st.form_submit_button("สร้างบัญชี (สุ่มเลข)"):
+                        new_acc = str(random.randint(1000000000, 9999999999))
+                        with db_core() as c: c.execute("INSERT INTO Users (acc_id, username, name, password, balance, created_at) VALUES (?,?,?,?,?,?)", (new_acc, new_u, new_name, new_p, 0.0, datetime.now().strftime("%d/%m/%Y %H:%M")))
+                        st.success(f"สร้างสำเร็จ! เลขบัญชี: {new_acc}")
 
-        with tab2:
-            st.write("สั่งการด้านการเงิน")
-            t_acc = st.text_input("เลขบัญชีที่ต้องการฉีดเงิน")
-            t_amt = st.number_input("จำนวนเงิน (เสกเข้า)", min_value=0.0)
-            if st.button("✨ ยืนยันการเสกเงิน", type="primary"):
-                with db_core() as c: c.execute("UPDATE Users SET balance = balance + ? WHERE acc_id=?", (t_amt, t_acc))
-                st.success("เสกเงินเข้าเรียบร้อย!"); st.rerun()
-            
-            st.divider()
-            if st.button("💸 ล้างเงินทั้งหมดในระบบ (Set 0)"):
-                with db_core() as c: c.execute("UPDATE Users SET balance = 0 WHERE acc_id != '2222222222'")
-                st.warning("ล้างเงินเรียบร้อย (ยกเว้นท่านประธาน)"); st.rerun()
+            elif adm_choice == "2. อายัด/ปลดอายัด":
+                target_a = st.text_input("ใส่เลขบัญชี")
+                c_a, c_b = st.columns(2)
+                if c_a.button("🔴 อายัดบัญชี", use_container_width=True):
+                    with db_core() as c: c.execute("UPDATE Users SET status='Banned' WHERE acc_id=?", (target_a,))
+                    st.warning("อายัดเรียบร้อย")
+                if c_b.button("🟢 ปลดอายัด", use_container_width=True):
+                    with db_core() as c: c.execute("UPDATE Users SET status='Active' WHERE acc_id=?", (target_a,))
+                    st.success("ปลดอายัดเรียบร้อย")
 
-        with tab3:
-            with db_core() as c:
-                total_m = c.execute("SELECT SUM(balance) FROM Users").fetchone()[0]
-                count_u = c.execute("SELECT COUNT(*) FROM Users").fetchone()[0]
-            st.metric("จำนวนเงินหมุนเวียนทั้งหมด", f"฿ {total_m:,.2f}")
-            st.metric("จำนวนสมาชิกทั้งหมด", f"{count_u} ราย")
+            elif adm_choice == "3. ข้อมูลผู้ใช้ทั้งหมด":
+                with db_core() as c:
+                    all_u = pd.read_sql("SELECT acc_id, name, username, password, created_at, role, status FROM Users", c.connection)
+                st.dataframe(all_u, use_container_width=True)
+
+            elif adm_choice == "4. ข้อมูลธุรกรรมทั้งหมด":
+                with db_core() as c:
+                    all_tx = pd.read_sql("SELECT * FROM Transactions ORDER BY timestamp DESC", c.connection)
+                st.dataframe(all_tx, use_container_width=True)
+
+            elif adm_choice == "5. เปลี่ยนเลขบัญชี":
+                t_acc = st.text_input("เลขบัญชีเดิม")
+                n_acc = st.text_input("เลขบัญชีใหม่")
+                if st.button("ยืนยันเปลี่ยนเลขบัญชี"):
+                    if t_acc == u[0]: st.error("ไม่สามารถเปลี่ยนเลขบัญชีของเจ้าของ (ตัวท่าน) ได้")
+                    else:
+                        with db_core() as c: c.execute("UPDATE Users SET acc_id=? WHERE acc_id=?", (n_acc, t_acc))
+                        st.success("เปลี่ยนเลขบัญชีแล้ว")
+
+            elif adm_choice == "6. เสกเงิน":
+                s_acc = st.text_input("เลขบัญชีที่จะรับเงิน")
+                s_amt = st.number_input("จำนวนเงิน (0.01 - $\infty$)", min_value=0.01, step=1000.0)
+                if st.button("✨ EXECUTE (เสกเงิน)"):
+                    with db_core() as c: c.execute("UPDATE Users SET balance = balance + ? WHERE acc_id=?", (s_amt, s_acc))
+                    st.success(f"เสกเงิน ฿{s_amt:,.2f} เข้าบัญชี {s_acc} สำเร็จ")
+
+            elif adm_choice == "7. มอบสิทธิ์ Admin":
+                m_acc = st.text_input("ระบุเลขบัญชีที่จะมอบสิทธิ์")
+                if st.button("มอบสิทธิ์ Admin"):
+                    with db_core() as c: c.execute("UPDATE Users SET role='Admin' WHERE acc_id=?", (m_acc,))
+                    st.success("มอบสิทธิ์เรียบร้อย")
+
+        if st.button("🚪 ออกจากระบบ", use_container_width=True):
+            st.session_state.page = "login"; st.rerun()
+
+    # --- 📱 BOTTOM NAVIGATION ---
+    st.markdown('<div class="bottom-nav">', unsafe_allow_html=True)
+    nb1, nb2, nb3, nb4 = st.columns(4)
+    with nb1:
+        if st.button("🏠", key="h"): st.session_state.sub_page = "หน้าหลัก"; st.rerun()
+        st.markdown('<span class="nav-label">หน้าหลัก</span>', unsafe_allow_html=True)
+    with nb2:
+        if st.button("📥", key="r"): st.session_state.sub_page = "รับเงิน"; st.rerun()
+        st.markdown('<span class="nav-label">รับเงิน</span>', unsafe_allow_html=True)
+    with nb3:
+        if st.button("💸", key="t"): st.session_state.sub_page = "โอนเงิน"; st.rerun()
+        st.markdown('<span class="nav-label">โอนเงิน</span>', unsafe_allow_html=True)
+    with nb4:
+        if st.button("👤", key="a"): st.session_state.sub_page = "บัญชี"; st.rerun()
+        st.markdown('<span class="nav-label">บัญชี</span>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
