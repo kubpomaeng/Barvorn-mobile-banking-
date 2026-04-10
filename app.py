@@ -17,7 +17,7 @@ except Exception as e:
 # --- CONFIG ---
 st.set_page_config(page_title="สุริยพาณิชย์ - SURIYA PANICH", page_icon="☀️", layout="centered")
 
-# --- LUXURY CSS (ธีมสุริยวงศ์) ---
+# --- LUXURY CSS ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@200;300;400;500;600&display=swap');
@@ -49,7 +49,8 @@ if st.session_state.page == "login":
             u_in = st.text_input("Username")
             p_in = st.text_input("Password", type="password")
             if st.form_submit_button("เข้าสู่ระบบ"):
-                res = supabase.table("Users").select("*").eq("username", u_in).eq("password", p_in).execute()
+                # แก้เป็น users (ตัวเล็ก)
+                res = supabase.table("users").select("*").eq("username", u_in).eq("password", p_in).execute()
                 if res.data:
                     user = res.data[0]
                     if user['status'] == 'Banned': st.error("บัญชีถูกอายัด")
@@ -58,10 +59,10 @@ if st.session_state.page == "login":
                         st.session_state.page = "main"; st.rerun()
                 else: st.error("ข้อมูลไม่ถูกต้อง")
 
-# --- 🏦 MAIN APP (SIDEBAR 3 ขีด) ---
+# --- 🏦 MAIN APP ---
 elif st.session_state.page == "main":
-    # Refresh User Data
-    u_res = supabase.table("Users").select("*").eq("acc_id", st.session_state.user['acc_id']).execute()
+    # Refresh User Data - แก้เป็น users (ตัวเล็ก)
+    u_res = supabase.table("users").select("*").eq("acc_id", st.session_state.user['acc_id']).execute()
     u = u_res.data[0]
 
     with st.sidebar:
@@ -81,7 +82,8 @@ elif st.session_state.page == "main":
         </div>''', unsafe_allow_html=True)
         
         st.write("🕒 **ธุรกรรมล่าสุด**")
-        tx_res = supabase.table("Transactions").select("*").or_(f"sender_id.eq.{u['acc_id']},receiver_id.eq.{u['acc_id']}").order("id", desc=True).limit(5).execute()
+        # แก้เป็น transactions (ตัวเล็ก)
+        tx_res = supabase.table("transactions").select("*").or_(f"sender_id.eq.{u['acc_id']},receiver_id.eq.{u['acc_id']}").order("id", desc=True).limit(5).execute()
         if not tx_res.data: st.caption("ยังไม่มีรายการเดินบัญชี")
         else:
             df = pd.DataFrame(tx_res.data)[['sender_id', 'receiver_id', 'amount', 'timestamp']]
@@ -99,13 +101,15 @@ elif st.session_state.page == "main":
             target = st.text_input("เลขบัญชีปลายทาง")
             amt = st.number_input("จำนวนเงิน (฿)", min_value=0.01)
             if st.form_submit_button("ตกลงโอนเงิน"):
-                recv_res = supabase.table("Users").select("*").eq("acc_id", target).execute()
+                # แก้เป็น users (ตัวเล็ก)
+                recv_res = supabase.table("users").select("*").eq("acc_id", target).execute()
                 if not recv_res.data: st.error("ไม่พบเลขบัญชี")
                 elif u['balance'] < amt: st.error("เงินไม่พอ")
                 else:
-                    supabase.table("Users").update({"balance": u['balance'] - amt}).eq("acc_id", u['acc_id']).execute()
-                    supabase.table("Users").update({"balance": recv_res.data[0]['balance'] + amt}).eq("acc_id", target).execute()
-                    supabase.table("Transactions").insert({"sender_id": u['acc_id'], "receiver_id": target, "amount": amt, "timestamp": datetime.now().strftime("%H:%M")}).execute()
+                    supabase.table("users").update({"balance": u['balance'] - amt}).eq("acc_id", u['acc_id']).execute()
+                    supabase.table("users").update({"balance": recv_res.data[0]['balance'] + amt}).eq("acc_id", target).execute()
+                    # แก้เป็น transactions (ตัวเล็ก)
+                    supabase.table("transactions").insert({"sender_id": u['acc_id'], "receiver_id": target, "amount": amt, "timestamp": datetime.now().strftime("%H:%M")}).execute()
                     st.success(f"โอนสำเร็จไปยัง {recv_res.data[0]['name']}"); time.sleep(1); st.rerun()
 
     elif menu == "บัญชี":
@@ -115,14 +119,15 @@ elif st.session_state.page == "main":
         if u['role'] == 'Admin':
             st.divider()
             st.subheader("👑 ศูนย์ควบคุมสุริยพาณิชย์")
-            opt = st.selectbox("เลือกฟังก์ชัน", ["สร้างบัญชีใหม่", "อายัด/เปิดบัญชี", "จัดการเงิน (เสกเงิน/ลดเงิน)", "ตรวจสอบสมาชิก"])
+            opt = st.selectbox("เลือกฟังก์ชัน", ["สร้างบัญชีใหม่", "จัดการเงิน (เสกเงิน/ลดเงิน)", "ตรวจสอบสมาชิก"])
             
             if opt == "สร้างบัญชีใหม่":
                 with st.form("a1"):
                     un, pw, nm = st.text_input("Username"), st.text_input("Password"), st.text_input("ชื่อจริง")
                     if st.form_submit_button("สร้างบัญชี"):
                         new_id = str(random.randint(1000000000, 9999999999))
-                        supabase.table("Users").insert({"acc_id": new_id, "username": un, "password": pw, "name": nm, "balance": 0.0, "status": "Active", "role": "User", "created_at": datetime.now().strftime("%d/%m/%Y")}).execute()
+                        # แก้เป็น users (ตัวเล็ก)
+                        supabase.table("users").insert({"acc_id": new_id, "username": un, "password": pw, "name": nm, "balance": 0.0, "status": "Active", "role": "User", "created_at": datetime.now().strftime("%d/%m/%Y")}).execute()
                         st.success(f"สร้างสำเร็จ! เลขบัญชี: {new_id}")
 
             elif opt == "จัดการเงิน (เสกเงิน/ลดเงิน)":
@@ -130,25 +135,6 @@ elif st.session_state.page == "main":
                 samt = st.number_input("จำนวนเงิน (฿)", min_value=0.0)
                 col1, col2 = st.columns(2)
                 
-                # --- ปุ่มเสกเงิน ---
                 if col1.button("✨ เพิ่มเงิน (เสกเงิน)"):
-                    target_u = supabase.table("Users").select("balance").eq("acc_id", sid).execute()
+                    target_u = supabase.table("users").select("balance").eq("acc_id", sid).execute()
                     if target_u.data:
-                        new_bal = target_u.data[0]['balance'] + samt
-                        supabase.table("Users").update({"balance": new_bal}).eq("acc_id", sid).execute()
-                        st.success(f"เสกเงินสำเร็จ! ยอดใหม่: {new_bal}")
-                        time.sleep(1); st.rerun()
-
-                # --- ปุ่มลดเงิน (ที่ท่านประธานขอเพิ่ม) ---
-                if col2.button("📉 ลดเงิน (ดึงเงินออก)"):
-                    target_u = supabase.table("Users").select("balance").eq("acc_id", sid).execute()
-                    if target_u.data:
-                        new_bal = target_u.data[0]['balance'] - samt
-                        if new_bal < 0: new_bal = 0 # ป้องกันติดลบ
-                        supabase.table("Users").update({"balance": new_bal}).eq("acc_id", sid).execute()
-                        st.warning(f"ลดเงินสำเร็จ! ยอดใหม่: {new_bal}")
-                        time.sleep(1); st.rerun()
-
-            elif opt == "ตรวจสอบสมาชิก":
-                all_u = supabase.table("Users").select("*").execute()
-                st.dataframe(pd.DataFrame(all_u.data), use_container_width=True)
