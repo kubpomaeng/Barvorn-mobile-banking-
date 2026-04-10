@@ -49,7 +49,6 @@ if st.session_state.page == "login":
             u_in = st.text_input("Username")
             p_in = st.text_input("Password", type="password")
             if st.form_submit_button("เข้าสู่ระบบ"):
-                # แก้เป็น users (ตัวเล็ก)
                 res = supabase.table("users").select("*").eq("username", u_in).eq("password", p_in).execute()
                 if res.data:
                     user = res.data[0]
@@ -61,7 +60,6 @@ if st.session_state.page == "login":
 
 # --- 🏦 MAIN APP ---
 elif st.session_state.page == "main":
-    # Refresh User Data - แก้เป็น users (ตัวเล็ก)
     u_res = supabase.table("users").select("*").eq("acc_id", st.session_state.user['acc_id']).execute()
     u = u_res.data[0]
 
@@ -82,7 +80,6 @@ elif st.session_state.page == "main":
         </div>''', unsafe_allow_html=True)
         
         st.write("🕒 **ธุรกรรมล่าสุด**")
-        # แก้เป็น transactions (ตัวเล็ก)
         tx_res = supabase.table("transactions").select("*").or_(f"sender_id.eq.{u['acc_id']},receiver_id.eq.{u['acc_id']}").order("id", desc=True).limit(5).execute()
         if not tx_res.data: st.caption("ยังไม่มีรายการเดินบัญชี")
         else:
@@ -101,14 +98,12 @@ elif st.session_state.page == "main":
             target = st.text_input("เลขบัญชีปลายทาง")
             amt = st.number_input("จำนวนเงิน (฿)", min_value=0.01)
             if st.form_submit_button("ตกลงโอนเงิน"):
-                # แก้เป็น users (ตัวเล็ก)
                 recv_res = supabase.table("users").select("*").eq("acc_id", target).execute()
                 if not recv_res.data: st.error("ไม่พบเลขบัญชี")
                 elif u['balance'] < amt: st.error("เงินไม่พอ")
                 else:
                     supabase.table("users").update({"balance": u['balance'] - amt}).eq("acc_id", u['acc_id']).execute()
                     supabase.table("users").update({"balance": recv_res.data[0]['balance'] + amt}).eq("acc_id", target).execute()
-                    # แก้เป็น transactions (ตัวเล็ก)
                     supabase.table("transactions").insert({"sender_id": u['acc_id'], "receiver_id": target, "amount": amt, "timestamp": datetime.now().strftime("%H:%M")}).execute()
                     st.success(f"โอนสำเร็จไปยัง {recv_res.data[0]['name']}"); time.sleep(1); st.rerun()
 
@@ -126,7 +121,6 @@ elif st.session_state.page == "main":
                     un, pw, nm = st.text_input("Username"), st.text_input("Password"), st.text_input("ชื่อจริง")
                     if st.form_submit_button("สร้างบัญชี"):
                         new_id = str(random.randint(1000000000, 9999999999))
-                        # แก้เป็น users (ตัวเล็ก)
                         supabase.table("users").insert({"acc_id": new_id, "username": un, "password": pw, "name": nm, "balance": 0.0, "status": "Active", "role": "User", "created_at": datetime.now().strftime("%d/%m/%Y")}).execute()
                         st.success(f"สร้างสำเร็จ! เลขบัญชี: {new_id}")
 
@@ -136,5 +130,20 @@ elif st.session_state.page == "main":
                 col1, col2 = st.columns(2)
                 
                 if col1.button("✨ เพิ่มเงิน (เสกเงิน)"):
-                    target_u = supabase.table("users").select("balance").eq("acc_id", sid).execute()
-                    if target_u.data:
+                    t_u = supabase.table("users").select("balance").eq("acc_id", sid).execute()
+                    if t_u.data:
+                        n_b = t_u.data[0]['balance'] + samt
+                        supabase.table("users").update({"balance": n_b}).eq("acc_id", sid).execute()
+                        st.success("เสกเงินสำเร็จ!"); time.sleep(1); st.rerun()
+
+                if col2.button("📉 ลดเงิน (ดึงเงินออก)"):
+                    t_u = supabase.table("users").select("balance").eq("acc_id", sid).execute()
+                    if t_u.data:
+                        n_b = t_u.data[0]['balance'] - samt
+                        if n_b < 0: n_b = 0
+                        supabase.table("users").update({"balance": n_b}).eq("acc_id", sid).execute()
+                        st.warning("ลดเงินสำเร็จ!"); time.sleep(1); st.rerun()
+
+            elif opt == "ตรวจสอบสมาชิก":
+                all_u = supabase.table("users").select("*").execute()
+                st.dataframe(pd.DataFrame(all_u.data), use_container_width=True)
